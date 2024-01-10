@@ -1,0 +1,60 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: vault
+  namespace: argocd
+spec:
+  project: default
+  source:
+    helm:
+      valuesObject:
+        injector:
+          enabled: false
+        server:
+          enabled: true
+          affinity: ""
+          standalone:
+            enabled: true
+            config: |
+              ui = true
+
+              listener "tcp" {
+                tls_disable = 1
+                address = "[::]:8200"
+                cluster_address = "[::]:8201"
+                # Enable unauthenticated metrics access (necessary for Prometheus Operator)
+                #telemetry {
+                #  unauthenticated_metrics_access = "true"
+                #}
+              }
+              storage "file" {
+                path = "/vault/data"
+              }
+
+              seal "gcpckms" {
+                credentials = "/vault/userconfig/credentials.json"
+                project     = "test-vault-auto-unseal"
+                region      = "global"
+                key_ring    = "vault-auto-unseal"
+                crypto_key  = "unseal-key"
+              }
+          # https://github.com/hashicorp/vault-helm/blob/main/values.yaml#L592-L605
+          volumes:
+            - name: gcp-creds
+              secret:
+                secretName: gcp-kms-sa
+          volumeMounts:
+            - name: gcp-creds
+              readOnly: true
+              mountPath: /vault/userconfig
+
+            
+    chart: vault
+    repoURL: https://helm.releases.hashicorp.com
+    targetRevision: 0.27.0
+  destination:
+    server: "https://kubernetes.default.svc"
+    namespace: vault
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
