@@ -14,30 +14,48 @@ spec:
           enabled: true
           affinity: ""
           standalone:
+            enabled: false
+          ha:
             enabled: true
-            config: |
-              ui = true
+            replicas: 3
+            raft:
+              enabled: true
+              config: |
+                ui = true
 
-              listener "tcp" {
-                tls_disable = 1
-                address = "[::]:8200"
-                cluster_address = "[::]:8201"
-                # Enable unauthenticated metrics access (necessary for Prometheus Operator)
-                #telemetry {
-                #  unauthenticated_metrics_access = "true"
-                #}
-              }
-              storage "file" {
-                path = "/vault/data"
-              }
+                listener "tcp" {
+                  tls_disable = 1
+                  address = "[::]:8200"
+                  cluster_address = "[::]:8201"
+                  # Enable unauthenticated metrics access (necessary for Prometheus Operator)
+                  #telemetry {
+                  #  unauthenticated_metrics_access = "true"
+                  #}
+                }
+                
+                storage "raft" {
+                  path = "/vault/data"
+                  retry_join {
+                    leader_api_addr = "http://vault-0.vault-internal:8200"
+                  }
+                  retry_join {
+                    leader_api_addr = "http://vault-1.vault-internal:8200"
+                  }
+                  retry_join {
+                    leader_api_addr = "http://vault-2.vault-internal:8200"
+                  }
+                }
 
-              seal "gcpckms" {
-                credentials = "/vault/userconfig/credentials.json"
-                project     = "test-vault-auto-unseal"
-                region      = "global"
-                key_ring    = "vault-auto-unseal"
-                crypto_key  = "unseal-key"
-              }
+                seal "gcpckms" {
+                  credentials = "/vault/userconfig/credentials.json"
+                  project     = "test-vault-auto-unseal"
+                  region      = "global"
+                  key_ring    = "vault-auto-unseal"
+                  crypto_key  = "unseal-key"
+                }
+
+                service_registration "kubernetes" {}
+
           # https://github.com/hashicorp/vault-helm/blob/main/values.yaml#L592-L605
           volumes:
             - name: gcp-creds
@@ -47,8 +65,7 @@ spec:
             - name: gcp-creds
               readOnly: true
               mountPath: /vault/userconfig
-
-            
+                 
     chart: vault
     repoURL: https://helm.releases.hashicorp.com
     targetRevision: 0.27.0
